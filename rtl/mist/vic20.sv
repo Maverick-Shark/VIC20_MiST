@@ -21,7 +21,7 @@
 
 `default_nettype none
 
-module vic20_mist
+module guest_top
 (
 	input         CLOCK_27,
 `ifdef USE_CLOCK_50
@@ -116,6 +116,10 @@ module vic20_mist
 	inout         EXP7,
 	inout         MOTOR_CTRL,
 `endif
+`ifdef USE_MIDI_PINS
+	input         MIDI_IN,
+	output        MIDI_OUT,
+`endif
 	input         UART_RX,
 	output        UART_TX
 
@@ -156,6 +160,18 @@ localparam bit BIG_OSD = 0;
 `define SEP
 `endif
 
+`ifdef USE_AUDIO_IN
+localparam bit USE_AUDIO_IN = 1;
+`else
+localparam bit USE_AUDIO_IN = 0;
+`endif
+
+`ifdef USE_MIDI_PINS
+localparam bit USE_MIDI_PINS = 1;
+`else
+localparam bit USE_MIDI_PINS = 0;
+`endif
+
 // remove this if the 2nd chip is actually used
 `ifdef DUAL_SDRAM
 assign SDRAM2_A = 13'hZZZZ;
@@ -171,10 +187,20 @@ assign SDRAM2_nRAS = 1;
 assign SDRAM2_nWE = 1;
 `endif
 
+
+`ifdef I2S_AUDIO
+
+`ifdef I2S_AUDIO_HDMI
+assign HDMI_MCLK = 0;
+assign HDMI_BCK = I2S_BCK;
+assign HDMI_LRCK = I2S_LRCK;
+assign HDMI_SDATA = I2S_DATA;
+`endif
+`endif
+
 `include "build_id.v"
 
 assign LED = ~ioctl_download & ~led_disk & cass_motor;
-
 wire uart_tx;
 
 `ifdef SIDI128_EXPANSION
@@ -184,13 +210,16 @@ assign UART_RTS = 0;
 assign EXP7 = 1'bZ;
 `else
 assign UART_TX = st_uart_en ? uart_tx : ~cass_motor;
+//assign UART_TX = ~cass_motor;
 `endif
 
 localparam TAP_MEM_START = 22'h20000;
 
 localparam CONF_STR =
 {
-    "VIC20;PRGCRTTAP;",
+    "VIC20;;",
+    "F1,PRGCRTTAP,Load;",
+    "F4pIDX,IDX,Open;",
     "S0U,D64,Mount Disk;",
     "TC,Play/Stop TAP;",
     `SEP
@@ -209,6 +238,7 @@ localparam CONF_STR =
     "P3OAB,Scanlines,Off,25%,50%,75%;",
     "P3OE,Composite blend,Off,On;",
     "P3OD,Tape sound,Off,On;",
+    "P3OI,Tape progress,Off,On;",
     "P3O9,Audio Filter,On,Off;",
 `ifndef SIDI128_EXPANSION
     "OH,Userport,Tape,UART;",
@@ -248,8 +278,8 @@ wire clk_1541 = clk_32;
 reg clk8m;
 wire pll_locked;
 reg clk_ref; //sync sdram to during prg downloading
-reg  reset;
-reg  c1541_reset;
+reg reset;
+reg c1541_reset;
 reg cart_unload;
 reg force_reset;
 
@@ -415,6 +445,7 @@ wire        st_blend               = status[14];
 wire        st_megacart            = status[15];
 wire        st_writenv             = status[16];
 wire        st_uart_en             = status[17];
+wire        st_tape_progress       = status[18];
 
 wire [31:0] sd_lba;
 wire [1:0]  sd_rd;
@@ -599,8 +630,8 @@ vic20 #(.I_EXTERNAL_ROM(1'b1)) VIC20
 
     .o_p2_h(p2_h),
 
-	 .i_uart_rx(UART_RX),
-	 .o_uart_tx(uart_tx),
+    .i_uart_rx(UART_RX),
+    .o_uart_tx(uart_tx),
 
     // -- ROM setup bus
     .CONF_WR(ioctl_internal_memory_wr & ioctl_ram_wr),
@@ -741,6 +772,8 @@ wire  [7:0] ioctl_index;
 wire        rom_download = ioctl_download && !ioctl_index;
 wire        prg_download = ioctl_download && (ioctl_index == 8'h01 || ioctl_index == 8'h41);
 wire        tap_download = ioctl_download && ioctl_index == 8'h81;
+//wire        idx_download = ioctl_download && ioctl_index == 8'h04;
+wire        idx_download = ioctl_download && ioctl_index == 8'h03;
 wire        megacart_download = ioctl_download && (ioctl_index==8'h02);
 reg   [4:0] ioctl_reg_inject_state = 0;
 wire [22:0] ioctl_target_addr;
@@ -812,7 +845,8 @@ always @(posedge clk_sys) begin
         end
         if (ioctl_prg_addr == 16'ha000) auto_reset <= 1;
     end
-    if (tap_download && ioctl_wr) begin
+    //if (tap_download && ioctl_wr) begin
+    if ((tap_download || idx_download) && ioctl_wr) begin
         ioctl_tap_addr <= ioctl_addr ? ioctl_tap_addr + 1'd1 : TAP_MEM_START; //load tap to 20000
         ioctl_ram_wr <= 1;
     end
@@ -840,13 +874,15 @@ end
 
 //////////////////   TAPE   //////////////////
 
-reg [22:0] tap_play_addr;
-reg [22:0] tap_last_addr;
+//reg [22:0] tap_play_addr;
+//reg [22:0] tap_last_addr;
+reg [22:0] tap_play_addr = TAP_MEM_START;
+reg [22:0] tap_last_addr = TAP_MEM_START;
 reg  [7:0] tap_data_in;
 reg        tap_reset;
 reg        tap_wrreq;
 reg        tap_wrfull;
-reg        tap_version;
+reg  [1:0] tap_version;
 reg        tap_sdram_oe;
 wire       cass_read;
 wire       cass_write;
@@ -861,14 +897,16 @@ always @(posedge clk_sys) begin
         tap_last_addr <= TAP_MEM_START;
         tap_sdram_oe <= 0;
         tap_reset <= 1;
+        //tap_reset <= 0;
     end else begin
         tap_reset <= 0;
-        if (tap_download) begin
+        //if (tap_download) begin
+        if (tap_download || idx_download) begin
             tap_play_addr <= TAP_MEM_START;
             tap_last_addr <= ioctl_tap_addr;
             tap_reset <= 1;
             if (ioctl_addr == 24'h0C && ioctl_wr) begin
-                tap_version <= ioctl_dout[0];
+                tap_version <= ioctl_dout[1:0];
             end
         end
         p2_hD <= p2_h;
@@ -897,9 +935,34 @@ c1530 c1530
     .cass_write(cass_write),
     .cass_motor(cass_motor),
     .cass_sense(cass_sense),
+    .cass_run(cass_run),
     .osd_play_stop_toggle(st_tap_play_btn | fn_keys[9]),
+    .osd_play_stop_reset(reset),
     .ear_input(ear_input)
 );
+
+//////////////////   PROGRESSBAR   //////////////////
+
+wire       progress;
+wire       cass_run;
+wire [1:0] progress_ce_pix;
+
+always @(posedge clk_sys) begin
+    progress_ce_pix <= progress_ce_pix + 1;
+end
+
+progressbar #( .X_OFFSET(100), .Y_OFFSET(20) ) bar
+(
+    .clk(clk_sys),
+    .ce_pix(progress_ce_pix[1] & progress_ce_pix[0]),
+    .hblank(~DE_O),
+    .vblank(~VS_O),
+    .enable(~cass_run & st_tape_progress),
+    .current({1'b0, tap_play_addr - TAP_MEM_START}),
+    .max({1'b0, tap_last_addr - TAP_MEM_START}),
+    .pix(progress)
+);
+
 //////////////////   AUDIO   //////////////////
 
 wire [15:0] vic_audio, vic_audio_filtered;
@@ -969,7 +1032,8 @@ wire        DE_O;
 
 wire        hs,vs;
 
-mist_video #(.COLOR_DEPTH(4), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD)) mist_video (
+mist_video #(.COLOR_DEPTH(4), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OUT_COLOR_DEPTH(VGA_BITS), .BIG_OSD(BIG_OSD)) mist_video
+(
     .clk_sys     ( clk_sys    ),
 
     // OSD SPI interface
@@ -995,9 +1059,12 @@ mist_video #(.COLOR_DEPTH(4), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OUT_COLOR_D
     .blend       ( st_blend   ),
 
     // video in
-    .R           ( R_O        ),
-    .G           ( G_O        ),
-    .B           ( B_O        ),
+    //.R           ( R_O        ),
+    //.G           ( G_O        ),
+    //.B           ( B_O        ),
+    .R           ( R_O | {progress&progress&progress&progress} ),
+    .G           ( G_O | {progress&progress&progress&progress} ),
+    .B           ( B_O | {progress&progress&progress&progress} ),
 
     .HSync       ( HS_O       ),
     .VSync       ( VS_O       ),
