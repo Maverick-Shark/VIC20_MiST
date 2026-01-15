@@ -217,9 +217,8 @@ localparam TAP_MEM_START = 22'h20000;
 
 localparam CONF_STR =
 {
-    "VIC20;;",
-    "F1,PRGCRTTAP,Load;",
-    "F4pIDX,IDX,Open;",
+    "VIC20;PRGCRTTAP;",
+    "F4pIDX,IDX,Open;",        // ioctl_index == 8'h04;
     "S0U,D64,Mount Disk;",
     "TC,Play/Stop TAP;",
     `SEP
@@ -772,8 +771,7 @@ wire  [7:0] ioctl_index;
 wire        rom_download = ioctl_download && !ioctl_index;
 wire        prg_download = ioctl_download && (ioctl_index == 8'h01 || ioctl_index == 8'h41);
 wire        tap_download = ioctl_download && ioctl_index == 8'h81;
-//wire        idx_download = ioctl_download && ioctl_index == 8'h04;
-wire        idx_download = ioctl_download && ioctl_index == 8'h03;
+wire        idx_download = ioctl_download && ioctl_index == 8'h04;
 wire        megacart_download = ioctl_download && (ioctl_index==8'h02);
 reg   [4:0] ioctl_reg_inject_state = 0;
 wire [22:0] ioctl_target_addr;
@@ -893,11 +891,11 @@ always @(posedge clk_sys) begin
     reg p2_hD;
 
     if (reset) begin
-        tap_play_addr <= TAP_MEM_START;
-        tap_last_addr <= TAP_MEM_START;
+        //tap_play_addr <= TAP_MEM_START;
+        //tap_last_addr <= TAP_MEM_START;
         tap_sdram_oe <= 0;
-        tap_reset <= 1;
-        //tap_reset <= 0;
+        //tap_reset <= 1;
+        tap_reset <= 0;
     end else begin
         tap_reset <= 0;
         //if (tap_download) begin
@@ -911,8 +909,10 @@ always @(posedge clk_sys) begin
         end
         p2_hD <= p2_h;
         tap_wrreq <= 0;
-        if (p2_hD && !p2_h && !ioctl_download && tap_play_addr != tap_last_addr && !tap_wrfull) tap_sdram_oe <= 1;
-        if (!p2_h && tap_sdram_oe) tap_data_in <= sdram_out;
+        if (p2_hD && !p2_h && !ioctl_download && tap_play_addr != tap_last_addr && !tap_wrfull)
+            tap_sdram_oe <= 1;
+        if (!p2_h && tap_sdram_oe)
+            tap_data_in <= sdram_out;
         if (p2_h && !p2_hD && tap_sdram_oe) begin
             tap_wrreq <= 1;
             tap_sdram_oe <= 0;
@@ -951,7 +951,7 @@ always @(posedge clk_sys) begin
     progress_ce_pix <= progress_ce_pix + 1;
 end
 
-progressbar #( .X_OFFSET(100), .Y_OFFSET(20) ) bar
+progressbar #( .X_OFFSET(130), .Y_OFFSET(20) ) bar
 (
     .clk(clk_sys),
     .ce_pix(progress_ce_pix[1] & progress_ce_pix[0]),
@@ -1059,12 +1059,9 @@ mist_video #(.COLOR_DEPTH(4), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OUT_COLOR_D
     .blend       ( st_blend   ),
 
     // video in
-    //.R           ( R_O        ),
-    //.G           ( G_O        ),
-    //.B           ( B_O        ),
-    .R           ( R_O | {progress&progress&progress&progress} ),
-    .G           ( G_O | {progress&progress&progress&progress} ),
-    .B           ( B_O | {progress&progress&progress&progress} ),
+    .R           ( R_O | {4{progress}} ),
+    .G           ( G_O | {4{progress}} ),
+    .B           ( B_O | {4{progress}} ),
 
     .HSync       ( HS_O       ),
     .VSync       ( VS_O       ),
@@ -1125,9 +1122,9 @@ mist_video #(.COLOR_DEPTH(4), .OSD_COLOR(3'd5), .SD_HCNT_WIDTH(10), .OUT_COLOR_D
     .blend       ( st_blend   ),
 
     // video in
-    .R           ( R_O        ),
-    .G           ( G_O        ),
-    .B           ( B_O        ),
+    .R           ( R_O | {4{progress}} ),
+    .G           ( G_O | {4{progress}} ),
+    .B           ( B_O | {4{progress}} ),
 
     .HSync       ( HS_O       ),
     .VSync       ( VS_O       ),
