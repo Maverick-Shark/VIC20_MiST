@@ -21,7 +21,8 @@
 
 `default_nettype none
 
-module guest_top
+//module guest_top
+module vic20_mist
 (
 	input         CLOCK_27,
 `ifdef USE_CLOCK_50
@@ -345,7 +346,12 @@ pll_reconfig pll_reconfig_inst
 
 pll_vic20 pll_vic20
 (
+`ifdef CLOCK_IN_50
+    .inclk0(CLOCK_50),
+`else
     .inclk0(CLOCK_27),
+`endif
+    //.inclk0(CLOCK_27),
     .c0(clk_sys),  //35.48 MHz PAL, 28.63 MHz NTSC
     .areset(pll_areset),
     .scanclk(pll_scanclk),
@@ -399,7 +405,12 @@ end
 
 pll27 pll
 (
+`ifdef CLOCK_IN_50
+    .inclk0(CLOCK_50),
+`else
     .inclk0(CLOCK_27),
+`endif
+    //.inclk0(CLOCK_27),
     .c0(clk_32) //32 MHz
 );
 
@@ -639,7 +650,12 @@ vic20 #(.I_EXTERNAL_ROM(1'b1)) VIC20
 );
 
 //////////////////   MEMORY   //////////////////
-assign SDRAM_CLK = clk_sys;
+`ifdef INVERT_SDRAM_CLOCK
+    assign SDRAM_CLK = ~clk_sys;
+`else
+    assign SDRAM_CLK = clk_sys;
+`endif
+//assign SDRAM_CLK = clk_sys;
 
 wire  [7:0] sdram_out;
 wire [15:0] sdram_vic20_a;

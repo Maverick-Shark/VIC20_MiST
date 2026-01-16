@@ -39,7 +39,8 @@
 
 set_global_assignment -name FAMILY "Cyclone IV GX"
 set_global_assignment -name DEVICE EP4CGX150DF27I7
-set_global_assignment -name TOP_LEVEL_ENTITY poseidon_top
+#set_global_assignment -name TOP_LEVEL_ENTITY poseidon_top
+set_global_assignment -name TOP_LEVEL_ENTITY vic20_mist
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 17.1.0
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "08:05:43  FEBRUARY 08, 2024"
 set_global_assignment -name LAST_QUARTUS_VERSION "17.1.0 Lite Edition"
@@ -382,11 +383,15 @@ set_global_assignment -name VERILOG_MACRO "SDRAM_tRP=15000"
 set_global_assignment -name VERILOG_MACRO "I2S_AUDIO=1"
 set_global_assignment -name VERILOG_MACRO "USE_AUDIO_IN=1"
 set_global_assignment -name VERILOG_MACRO "USE_CLOCK_50=1"
+set_global_assignment -name VERILOG_MACRO "CLOCK_IN_50=1"
+set_global_assignment -name VERILOG_MACRO "INVERT_SDRAM_CLOCK=1"
 set_global_assignment -name VERILOG_MACRO "BIG_OSD=1"
 
 set_global_assignment -name PRE_FLOW_SCRIPT_FILE "quartus_sh:build_id.tcl"
 
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/mist/poseidon_top.sv
+#set_global_assignment -name SYSTEMVERILOG_FILE rtl/mist/poseidon_top.sv
+set_global_assignment -name QIP_FILE rtl/mist/cyc4gx/pll27.qip
+set_global_assignment -name QIP_FILE rtl/mist/cyc4gx/pll_vic20.qip
 set_global_assignment -name QIP_FILE files.qip
 
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

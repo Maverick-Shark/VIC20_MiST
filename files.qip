@@ -3,8 +3,6 @@ set_global_assignment -name SDC_FILE rtl/mist/vic20.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mist/sdram.sv
 set_global_assignment -name VERILOG_FILE rtl/mist/sigma_delta_dac.v
 set_global_assignment -name QIP_FILE rtl/mist/mist-modules/mist.qip
-set_global_assignment -name QIP_FILE rtl/mist/cyc4gx/pll27.qip
-set_global_assignment -name QIP_FILE rtl/mist/cyc4gx/pll_vic20.qip
 set_global_assignment -name QIP_FILE rtl/T65/T65.qip
 set_global_assignment -name VERILOG_FILE rtl/keyboard.v
 set_global_assignment -name VERILOG_FILE rtl/progressbar.v
