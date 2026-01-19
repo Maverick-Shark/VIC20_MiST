@@ -786,8 +786,9 @@ wire        ioctl_download;
 wire  [7:0] ioctl_index;
 wire        rom_download = ioctl_download && !ioctl_index;
 wire        prg_download = ioctl_download && (ioctl_index == 8'h01 || ioctl_index == 8'h41);
-wire        tap_download = ioctl_download && ioctl_index == 8'h81;
-wire        idx_download = ioctl_download && ioctl_index == 8'h04;
+//wire      tap_download = ioctl_download && ioctl_index == 8'h81;
+//wire      idx_download = ioctl_download && ioctl_index == 8'h04;
+wire        tap_download = ioctl_download && (ioctl_index == 8'h04 || ioctl_index == 8'h81);
 wire        megacart_download = ioctl_download && (ioctl_index==8'h02);
 reg   [4:0] ioctl_reg_inject_state = 0;
 wire [22:0] ioctl_target_addr;
@@ -859,8 +860,8 @@ always @(posedge clk_sys) begin
         end
         if (ioctl_prg_addr == 16'ha000) auto_reset <= 1;
     end
-    //if (tap_download && ioctl_wr) begin
-    if ((tap_download || idx_download) && ioctl_wr) begin
+    if (tap_download && ioctl_wr) begin
+    //if ((tap_download || idx_download) && ioctl_wr) begin
         ioctl_tap_addr <= ioctl_addr ? ioctl_tap_addr + 1'd1 : TAP_MEM_START; //load tap to 20000
         ioctl_ram_wr <= 1;
     end
@@ -914,8 +915,8 @@ always @(posedge clk_sys) begin
         tap_reset <= 0;
     end else begin
         tap_reset <= 0;
-        //if (tap_download) begin
-        if (tap_download || idx_download) begin
+        if (tap_download) begin
+        //if (tap_download || idx_download) begin
             tap_play_addr <= TAP_MEM_START;
             tap_last_addr <= ioctl_tap_addr;
             tap_reset <= 1;
