@@ -21,7 +21,6 @@
 
 `default_nettype none
 
-//module guest_top
 module vic20_mist
 (
 	input         CLOCK_27,
@@ -211,7 +210,6 @@ assign UART_RTS = 0;
 assign EXP7 = 1'bZ;
 `else
 assign UART_TX = st_uart_en ? uart_tx : ~cass_motor;
-//assign UART_TX = ~cass_motor;
 `endif
 
 localparam TAP_MEM_START = 22'h20000;
@@ -351,7 +349,6 @@ pll_vic20 pll_vic20
 `else
     .inclk0(CLOCK_27),
 `endif
-    //.inclk0(CLOCK_27),
     .c0(clk_sys),  //35.48 MHz PAL, 28.63 MHz NTSC
     .areset(pll_areset),
     .scanclk(pll_scanclk),
@@ -410,7 +407,6 @@ pll27 pll
 `else
     .inclk0(CLOCK_27),
 `endif
-    //.inclk0(CLOCK_27),
     .c0(clk_32) //32 MHz
 );
 
@@ -655,7 +651,6 @@ vic20 #(.I_EXTERNAL_ROM(1'b1)) VIC20
 `else
     assign SDRAM_CLK = clk_sys;
 `endif
-//assign SDRAM_CLK = clk_sys;
 
 wire  [7:0] sdram_out;
 wire [15:0] sdram_vic20_a;
@@ -671,7 +666,7 @@ wire [22:0] sdram_vic20_a_adj =
 //   sdram_vic20_a;
 
 always_comb begin
-    casex ({megacart_download | rom_download | prg_download | tap_download, p2_h})
+    casex ({megacart_download | rom_download | prg_download | tap_download | idx_download, p2_h})
     'b01 : sdram_a = sdram_vic20_a_adj;
     'b00 : sdram_a = tap_play_addr;
     'b1X : sdram_a = ioctl_target_addr;
@@ -746,7 +741,7 @@ assign to_vic = mc_qm ? mc_to_vic : (mc_nvram_sel ? mc_nvram_out : sdram_out);
 
 wire [7:0] sdram_in;
 assign sdram_in =
-	(megacart_download | rom_download | prg_download | tap_download) ? ioctl_dout
+	(megacart_download | rom_download | prg_download | tap_download | idx_download) ? ioctl_dout
 		: from_vic;
 
 wire sdram_we;
@@ -754,7 +749,7 @@ assign sdram_we = (sdram_en & ~mc_sdram_wr_n) || // Write originates from VIC20
 	cart_unload ||
 	( ioctl_ram_wr &&
 		(((rom_download || prg_download) && !ioctl_internal_memory_wr) ||
-		(megacart_download || tap_download))
+		(megacart_download || tap_download || idx_download))
 	);
 
 wire sdram_oe;
@@ -813,7 +808,7 @@ data_io data_io (
 );
 
 always_comb begin
-    casex ({megacart_download , tap_download, rom_download, ioctl_addr[15:13]})
+    casex ({megacart_download , tap_download | idx_download, rom_download, ioctl_addr[15:13]})
         'b0X1_00X: ioctl_target_addr = {7'h0, 2'b00, ioctl_addr[13:0]}; //1541
         'b0X1_010: ioctl_target_addr = {7'h0, 3'b111, ioctl_addr[12:0]}; //kernal pal
         'b0X1_011: ioctl_target_addr = {7'h1, 3'b111, ioctl_addr[12:0]}; //kernal ntsc
@@ -859,7 +854,6 @@ always @(posedge clk_sys) begin
         end
         if (ioctl_prg_addr == 16'ha000) auto_reset <= 1;
     end
-    //if (tap_download && ioctl_wr) begin
     if ((tap_download || idx_download) && ioctl_wr) begin
         ioctl_tap_addr <= ioctl_addr ? ioctl_tap_addr + 1'd1 : TAP_MEM_START; //load tap to 20000
         ioctl_ram_wr <= 1;
@@ -910,11 +904,9 @@ always @(posedge clk_sys) begin
         //tap_play_addr <= TAP_MEM_START;
         //tap_last_addr <= TAP_MEM_START;
         tap_sdram_oe <= 0;
-        //tap_reset <= 1;
-        tap_reset <= 0;
+        tap_reset <= 0;  // Reset at system startup
     end else begin
         tap_reset <= 0;
-        //if (tap_download) begin
         if (tap_download || idx_download) begin
             tap_play_addr <= TAP_MEM_START;
             tap_last_addr <= ioctl_tap_addr;
@@ -925,10 +917,8 @@ always @(posedge clk_sys) begin
         end
         p2_hD <= p2_h;
         tap_wrreq <= 0;
-        if (p2_hD && !p2_h && !ioctl_download && tap_play_addr != tap_last_addr && !tap_wrfull)
-            tap_sdram_oe <= 1;
-        if (!p2_h && tap_sdram_oe)
-            tap_data_in <= sdram_out;
+        if (p2_hD && !p2_h && !ioctl_download && tap_play_addr != tap_last_addr && !tap_wrfull) tap_sdram_oe <= 1;
+        if (!p2_h && tap_sdram_oe) tap_data_in <= sdram_out;
         if (p2_h && !p2_hD && tap_sdram_oe) begin
             tap_wrreq <= 1;
             tap_sdram_oe <= 0;
